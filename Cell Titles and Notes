@@ -1,0 +1,104 @@
+import arcpy
+import os
+
+# --- User Inputs ---
+
+# 1. PASTE THE TEXT BLOCK FROM THE ENC NOTE HERE
+text_block = """NOAA ENC®
+
+NATIONAL OCEANIC AND ATMOSPHERIC ADMINISTRATION
+
+US5SC1NV - ATLANTIC INTRACOASTAL WATERWAY - DU PRE CREEK TO SOUTH SANTEE RIVER
+
+
+INDEX:
+
+NOTE A
+AIDS TO NAVIGATION
+POLLUTION REPORTS
+CAUTION - USE OF RADIO SIGNALS (LIMITATIONS)
+SUPPLEMENTAL INFORMATION
+CAUTION - TEMPORARY CHANGES
+WARNING - PRUDENT MARINER
+ADDITIONAL INFORMATION
+AUTHORITIES
+ADMINISTRATION AREA
+BROADCASTS OF MARINE WEATHER FORECASTS AND WARNINGS BY MARINE RADIOTELEPHONE STATIONS
+CAUTION - ALL CRAFT
+CAUTION - DREDGED AREAS
+CAUTION - HURRICANES AND TROPICAL STORMS
+CAUTION - QUALITY OF BATHYMETRIC DATA
+CAUTION - SMALL CRAFT
+CAUTION - USACE HYDROGRAPHIC SURVEYS
+CAUTION - WARNINGS CONCERNING LARGE VESSELS
+HURRICANES AND TROPICAL STORMS
+INTRACOASTAL WATERWAY AIDS
+MARINE WEATHER FORECASTS
+NOAA WEATHER RADIO BROADCASTS
+PUBLIC BOATING INSTRUCTION PROGRAMS
+RADAR REFLECTORS
+RULES OF THE ROAD (ABRIDGED)
+WATER LEVELS, CURRENTS, AND TIDES
+COMMENTS REQUESTED"""
+
+# 2. SET THE PATH TO YOUR FEATURE CLASS OR SHAPEFILE
+feature_class_path = r"C:\path\to\your\data.shp"
+
+# 3. DEFINE THE FIELD NAMES
+cell_name_field = "CellName"    # Field with names like "US5SC1NV"
+note_field = "M_NPUB_Note"      # Field to be updated with the notes
+
+# --- Main Script Logic (No edits needed below this line) ---
+
+try:
+    print("Starting script...")
+
+    # --- 1. Parse the Text Block ---
+    lines = text_block.strip().splitlines()
+    target_cell_name = ""
+    notes_list = []
+    
+    for line in lines:
+        if line.strip().startswith("US"):
+            target_cell_name = line.strip().split(" ")[0]
+            break
+            
+    parsing_notes = False
+    for line in lines:
+        stripped_line = line.strip()
+        if stripped_line == "INDEX:":
+            parsing_notes = True
+            continue
+        
+        if parsing_notes and stripped_line:
+            notes_list.append(stripped_line)
+
+    if not target_cell_name or not notes_list:
+        raise ValueError("Could not parse a valid Cell Name or Index list from the text block.")
+
+    # MODIFIED LINE: Format each note with parentheses and join with a space
+    combined_notes = " ".join([f"({note})" for note in notes_list])
+    
+    print(f"Parsed Cell Name: {target_cell_name}")
+    print(f"Found {len(notes_list)} notes to add.")
+
+    # --- 2. Update the Feature Class ---
+    where_clause = f"{arcpy.AddFieldDelimiters(feature_class_path, cell_name_field)} = '{target_cell_name}'"
+    
+    updated_count = 0
+    with arcpy.da.UpdateCursor(feature_class_path, [note_field], where_clause) as cursor:
+        for row in cursor:
+            row[0] = combined_notes
+            cursor.updateRow(row)
+            updated_count += 1
+            print(f"Updating row for {target_cell_name}...")
+
+    if updated_count > 0:
+        print(f"\nSuccess! Updated {updated_count} feature(s) matching '{target_cell_name}'.")
+    else:
+        print(f"\nWarning: No features were found with {cell_name_field} = '{target_cell_name}'. No updates were made.")
+
+except arcpy.ExecuteError:
+    print(arcpy.GetMessages(2))
+except Exception as e:
+    print(f"An unexpected error occurred: {e}")
